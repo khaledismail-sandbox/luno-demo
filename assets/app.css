@@ -17,3 +17,7 @@
 .launcher input { min-height: 50px; padding-inline: 14px; font-size: 16px; }
 .profile-reference { margin: 0 0 28px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .launcher .cta { margin-top: auto; }
+.nav-link { color: inherit; text-decoration: none; }
+a.cta { text-decoration: none; }
+.purchase + .purchase { margin-top: 10px; }
+a.textbtn { display: inline-flex; align-items: center; }

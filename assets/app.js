@@ -3,13 +3,13 @@
 const KEY='be1a4736da800301ae9f7abe0a1a975e';
 const cdn='https://cdn.amplitude.com/script/'+KEY;
 const root=document.body.dataset.root, page=document.body.dataset.page;
-const routes={launcher:'',explore:'explore/',stock:'stocks/cape-meridian/',preview:'order/preview/',confirmation:'order/confirmation/'};
-const titles={explore:'Explore',stock:'Cape Meridian',preview:'Order preview',confirmation:'Confirmation'};
+const routes={launcher:'',explore:'explore/',stock:'stocks/cape-meridian/',preview:'order/preview/',confirmation:'order/confirmation/',portfolio:'portfolio/',holding:'portfolio/cape-meridian/',activity:'activity/',details:'activity/order/'};
+const titles={explore:'Explore',stock:'Cape Meridian',preview:'Order preview',confirmation:'Confirmation',portfolio:'Portfolio',holding:'Cape Meridian holding',activity:'Activity',details:'Order details'};
 const view=document.querySelector('#view'), $=s=>document.querySelector(s);
 const read=(k,f=null)=>JSON.parse(localStorage.getItem('luno:'+k)||JSON.stringify(f));
 const write=(k,v)=>localStorage.setItem('luno:'+k,JSON.stringify(v));
 let id=read('active'), user=id&&read(id), attempt=user?.draft, busy=false, panelMode=null;
-const save=()=>write(id,user), go=p=>location.assign(root+routes[p]);
+const save=()=>{if(id===read('active'))write(id,user)}, go=p=>location.assign(root+routes[p]);
 const current=()=>id===read('active');
 const fixtures=[
  ['google','cpc','za_stock_search','www.google.com'],['google','organic','za_stock_learning','www.google.com'],
@@ -49,20 +49,60 @@ const back=p=>'<a class="icon" aria-label="Back" href="'+root+routes[p]+'">'+ico
 function header(prev){return '<header>'+(prev?back(prev):mark)+'<strong>'+(prev?titles[page]:'')+'</strong><button class="icon" id="account" aria-label="Switch profile">'+icon('account')+'</button></header>'}
 const footer=(label,action)=>'<div class="actions"><button class="cta" id="'+action+'">'+label+'</button></div>';
 const list=(rows)=>'<dl class="receipt">'+rows.map(([a,b])=>'<div><dt>'+a+'</dt><dd>'+b+'</dd></div>').join('')+'</dl>';
+const guideKey='guide-understand-tokenised';
+const practiceQuote={quantity:1,unit_price_usd:100,platform_fee_usd:1};
+const money=value=>'$'+value.toFixed(2);
+const orderUrl=(route,order)=>root+routes[route]+'?order='+encodeURIComponent(order.order_id);
+function orders(){
+ const history=[...(user.orders||[])];
+ if(user.receipt&&!history.some(order=>order.order_id===user.receipt.order_id))history.push(user.receipt);
+ return history.map(order=>({...practiceQuote,...order}));
+}
+function selectedOrder(){
+ const key=new URLSearchParams(location.search).get('order');
+ return orders().find(order=>order.order_id===(key??(page==='confirmation'?user.receipt?.order_id:null)));
+}
+function amounts(order){
+ const value=order.quantity*order.unit_price_usd;
+ return [['Quantity',order.quantity+' '+(order.quantity===1?'unit':'units')],['Unit price',money(order.unit_price_usd)],['Order value',money(value)],['Platform fee',money(order.platform_fee_usd)],['Total · USD',money(value+order.platform_fee_usd)]];
+}
+function link(label,route,selector,style='textbtn'){
+ return '<a class="'+style+'" id="'+selector+'" href="'+root+routes[route]+'">'+label+'</a>';
+}
+function accountScreen(){
+ const history=orders(),qty=history.reduce((sum,order)=>sum+order.quantity,0);
+ const units=qty+' '+(qty===1?'unit':'units');
+ const parent={portfolio:'explore',holding:'portfolio',activity:'holding',details:'activity'}[page];
+ let content='';
+ if(page==='portfolio')content=qty?link('Cape Meridian · '+units,'holding','holding-card','card'):'<p>You have no holdings yet.</p>';
+ if(page==='holding')content=(qty?'<p>'+units+'</p>':'<p>You have no Cape Meridian units.</p>')+link('Activity','activity','holding-activity','textbtn guide-record');
+ if(page==='activity')content=history.length?history.reverse().map(order=>'<a class="card purchase '+(order.order_id===user.walk?.order?'guide-record':'')+'" href="'+orderUrl('details',order)+'">Cape Meridian purchase · '+order.order_id+'</a>').join(''):'<p>No purchases yet.</p>';
+ if(page==='details'){
+   const order=selectedOrder();
+   content=order?'<p>Cape Meridian · CMX</p>'+list([...amounts(order),['Order ID',order.order_id]]):'<p>Purchase unavailable for this profile.</p>';
+   if(order&&user.walk?.active&&order.order_id===user.walk.order)content+='<button id="finish-guide" class="cta guide-record" disabled>Finish guide</button>';
+ }
+ return header(parent)+'<section class="scroll"><h1>'+titles[page]+'</h1>'+content+'</section>';
+}
 function render(){
  if(page==='explore'){
  const tabs='<div class="tabs"><span class="active">'+icon('Stocks')+'Stocks</span><button disabled>'+icon('ETFs')+'ETFs</button></div>';
- const nav='<nav aria-label="Main navigation">'+['Home','Crypto','Stocks','Earn','Portfolio'].map(k=>k==='Stocks'?'<span class="active" aria-current="page">'+icon(k)+k+'</span>':'<button disabled>'+icon(k)+k+'</button>').join('')+'</nav>';
- view.innerHTML=header()+tabs+'<section class="scroll listing"><h1 class="sr-only">Stocks</h1><a class="card" href="'+root+routes.stock+'"><div class="subhead">'+asset+'<span aria-hidden="true">›</span></div><div class="row"><span><strong>Cape Meridian</strong><br><small>CMX</small></span>'+chart()+'<span class="money"><strong>$100.00</strong><br><small class="positive">+1.20%</small></span></div></a><button class="textbtn" id="market-highlights">Market highlights</button></section>'+nav;
+ const nav='<nav aria-label="Main navigation">'+['Home','Crypto','Stocks','Earn','Portfolio'].map(k=>k==='Stocks'?'<span class="active" aria-current="page">'+icon(k)+k+'</span>':k==='Portfolio'?link(icon(k)+k,'portfolio','portfolio-tab','nav-link'):'<button disabled>'+icon(k)+k+'</button>').join('')+'</nav>';
+ view.innerHTML=header()+tabs+'<section class="scroll listing"><h1 class="sr-only">Stocks</h1><a class="card" id="company-card" href="'+root+routes.stock+'"><div class="subhead">'+asset+'<span aria-hidden="true">›</span></div><div class="row"><span><strong>Cape Meridian</strong><br><small>CMX</small></span>'+chart()+'<span class="money"><strong>$100.00</strong><br><small class="positive">+1.20%</small></span></div></a><button class="textbtn" id="begin-guide" disabled>Walk me through my first order</button><br><button class="textbtn" id="market-highlights">Market highlights</button></section>'+nav;
  }else if(page==='stock'){
  view.innerHTML=header('explore')+'<section class="scroll">'+asset+'<p class="eyebrow">CMX · USD</p><h1>Cape Meridian</h1><p class="price">$100.00</p><small class="positive">+$1.19 (1.20%) today</small>'+chart(true)+'<div class="section"><h2>Instrument details</h2><div class="subhead"><span>Tokenised stock</span><button class="textbtn" id="ownership-guide" disabled>What would I own?</button></div><p class="mini muted">Illustrative price · US dollars</p></div></section>'+footer('Preview order','request');
- $('#ownership-guide').hidden=user.ack||user.guideDismissed;
-
+ const explanation=$('#ownership-guide');
+ explanation.hidden=!user.walk?.active;
+ explanation.disabled=false;
+ explanation.onclick=()=>{if(!panelMode&&current()){openPanel('guide');track('Ownership Explanation Opened',{entry_point:'guide'})}};
  $('#request').onclick=request;
  }else if(page==='preview'){
- view.innerHTML=header('stock')+'<section class="scroll"><p class="eyebrow">One-time purchase</p><h1>Review your order</h1><p>Cape Meridian · CMX</p>'+list([['Quantity','1 unit'],['Unit price','$100.00'],['Platform fee','$1.00'],['Total · USD','$101.00']])+'<p class="notice">Confirming this order won’t move money or buy shares.</p><label class="mini">Private note (optional)<input class="amp-mask" maxlength="36" autocomplete="off" placeholder="Add a note"></label></section>'+footer('Confirm order','confirm');$('#confirm').onclick=confirm;
+ view.innerHTML=header('stock')+'<section class="scroll"><p class="eyebrow">One-time purchase</p><h1>Review your order</h1><p>Cape Meridian · CMX</p>'+list(amounts(user.draft.quote||practiceQuote))+'<p class="notice">Confirming this order won’t move money or buy shares.</p><label class="mini">Private note (optional)<input class="amp-mask" maxlength="36" autocomplete="off" placeholder="Add a note"></label></section>'+footer('Confirm order','confirm');$('#confirm').onclick=confirm;
+ }else if(page==='confirmation'){
+ const order=selectedOrder();
+ view.innerHTML=header('explore')+'<section class="scroll"><span class="seal">✓</span><h1>Order confirmed</h1><p>Cape Meridian · CMX</p>'+list([...amounts(order),['Order ID',order.order_id]])+'<p class="notice">No shares were purchased or funds transferred.</p></section><div class="actions">'+link('View my portfolio','portfolio','view-portfolio','cta')+'<button id="home" class="secondary">Back to Explore</button></div>';$('#home').onclick=()=>go('explore');
  }else{
- view.innerHTML=header('explore')+'<section class="scroll"><span class="seal">✓</span><h1>Order confirmed</h1><p>Your order details are below.</p>'+list([['Cape Meridian','1 unit'],['Order value','$100.00'],['Platform fee','$1.00'],['Total · USD','$101.00'],['Order ID',user.receipt.order_id]])+'<p class="notice">No shares were purchased or funds transferred.</p></section>'+footer('Back to Explore','home');$('#home').onclick=()=>go('explore');
+ view.innerHTML=accountScreen();
  }
  $('#account').onclick=switchAccount;
 }
@@ -72,25 +112,37 @@ function openPanel(mode){
  view.inert=true;$('.phone').append(layer);$('#panel-title').focus();
  const close=()=>{layer.remove();view.inert=false;panelMode=null;(mode==='guide'&&!user.ack?$('#ownership-guide'):$('#request')).focus()};
  layer.onkeydown=e=>{if(e.key==='Tab'){const at=document.activeElement;if(e.shiftKey&&at!== $('#leave')){e.preventDefault();$('#leave').focus()}else if(!e.shiftKey&&at===$('#leave')){e.preventDefault();$('#ack').focus()}}if(e.key==='Escape'&&mode==='guide')close()};
- $('#ack').onclick=()=>{if(user.ack||busy)return;user.ack=true;$('#ownership-guide').hidden=true;
+ $('#ack').onclick=()=>{if(busy)return;if(user.ack){close();return}user.ack=true;
  if(mode==='preview_gate')user.draft.status='ready';save();identifyUpdate();
  const op=track('Ownership Explanation Acknowledged',{entry_point:mode});close();if(mode==='preview_gate')trackThenGo(op,'preview')};
  $('#leave').onclick=()=>{if(mode==='guide'){close();return}if(busy)return;user.exited=true;user.draft=null;save();const op=track('Order Preview Abandoned',{exit_action:'back_to_explore'});trackThenGo(op,'explore')};
 }
 function request(){
  if(busy||panelMode)return;
- attempt=user.draft={id:crypto.randomUUID(),snapshot:user.ack?'Returning':'First-time',status:user.ack?'ready':'gate'};save();
+ attempt=user.draft={id:crypto.randomUUID(),snapshot:user.ack?'Returning':'First-time',quote:{...practiceQuote},status:user.ack?'ready':'gate'};save();
  const op=track('Order Preview Requested');if(user.ack){trackThenGo(op,'preview');return}
  openPanel('preview_gate');track('Ownership Panel Viewed',{entry_point:'preview_gate'});
 }
 function confirm(){
- if(busy||!current())return;user=read(id);attempt=user.draft;
+ if(busy||!current())return;
+ const displayedDraft=attempt?.id;
+ const commit=()=>confirmDraft(displayedDraft);
+ if(navigator.locks){navigator.locks.request('luno-order:'+id,commit).catch(showFailure);return}
+ commit();
+}
+function confirmDraft(displayedDraft){
+ if(busy||!current())return;
+ user=read(id);attempt=user.draft;
+ if(attempt&&attempt.id!==displayedDraft){location.reload();return}
  if(!attempt||attempt.status!=='ready'){location.reload();return}
- const order_id=attempt.id.slice(0,8).toUpperCase(),props={transaction_value_usd:100,platform_fee_usd:1,order_id};
- user.receipt={order_id,snapshot:attempt.snapshot};user.orders.push(user.receipt);user.draft=null;
+ const quote=attempt.quote||practiceQuote;
+ const shortId=attempt.id.slice(0,8).toUpperCase();
+ const order_id=orders().some(order=>order.order_id===shortId)?attempt.id.toUpperCase():shortId;
+ const props={transaction_value_usd:quote.quantity*quote.unit_price_usd,platform_fee_usd:quote.platform_fee_usd,order_id};
+ user.receipt={order_id,snapshot:attempt.snapshot,...quote};user.orders??=[];user.orders.push(user.receipt);if(user.walk?.active&&!user.walk.order)user.walk.order=order_id;user.draft=null;
  // The receipt and its outbox entry are committed together by track().
- const op=track('Demo Order Confirmed',props,{insert_id:attempt.id,revenue:1,price:1,quantity:1,revenueType:'simulated_platform_fee',currency:'USD'});
- trackThenGo(op,'confirmation');
+ const op=track('Demo Order Confirmed',props,{insert_id:attempt.id,revenue:quote.platform_fee_usd,price:quote.platform_fee_usd,quantity:1,revenueType:'simulated_platform_fee',currency:'USD'});
+ trackThenGo(op,'confirmation',user.receipt);
 }
 const diagnostics={plugins:{},errors:[],stage:'idle'};
 const observed=new Set();
@@ -134,7 +186,7 @@ function drain(){
 }
 function showFailure(e){diagnostics.errors.push(String(e));if(document.querySelector('.callout'))return;const note=document.createElement('p');note.className='callout mini';note.setAttribute('role','status');note.textContent='Connection unavailable. Your progress is saved on this device.';view.prepend(note)}
 const bound=(p,ms=1300)=>Promise.race([p,new Promise(resolve=>setTimeout(resolve,ms))]);
-async function trackThenGo(op,target){if(busy)return;busy=true;await bound(op.then(()=>amplitude.flush().promise).catch(()=>{}));go(target)}
+async function trackThenGo(op,target,order){if(busy)return;busy=true;await bound(op.then(()=>amplitude.flush().promise).catch(()=>{}));if(order)location.assign(orderUrl(target,order));else go(target)}
 async function switchAccount(){
  if(busy)return;busy=true;
  try{await bound(tail);if(user.queue.length)throw Error('Pending delivery');await bound(ready.then(()=>amplitude.flush().promise));amplitude.reset();user.draft=null;save();go('launcher')}
@@ -147,6 +199,17 @@ function wrapped(plugin,label){
 }
 function handleNative(event){
  const props=event.event_properties||{}, type=event.event_type||'';
+ if(props['[Guides-Surveys] Key']===guideKey&&user.walk?.active){
+   if(type==='[Guides-Surveys] Guide Viewed'&&props['[Guides-Surveys] Step Index']===5&&$('#finish-guide'))$('#finish-guide').disabled=false;
+   if(type==='[Guides-Surveys] Guide Dismissed'||type==='[Guides-Surveys] Guide Completed'){
+     const completed=type.endsWith('Completed');
+     user.walk={...user.walk,active:false,completed};save();
+     if(!completed){user.guideDismissed=true;track('Ownership Guide Dismissed');identifyUpdate()}
+     if($('#begin-guide'))$('#begin-guide').hidden=completed;
+     if($('#ownership-guide'))$('#ownership-guide').hidden=true;
+     if($('#finish-guide'))$('#finish-guide').hidden=true;
+   }
+ }
  if(page!=='explore'||!user.exited||!surveyOpen)return;
  if(props['[Guides-Surveys] Key']!=='survey-what-did-you-need')return;
  const answer=props['[Guides-Surveys] Survey Response String'];
@@ -238,8 +301,6 @@ async function connectEngagement(config,bridge){
    for(const event of pendingEngagementEvents.splice(0))await plugin.execute(event);
  }
  diagnostics.plugins.engagement='setup complete';
- eng.addCallback('luno_read_ownership',()=>{if(page==='stock'&&!user.ack&&!user.guideDismissed&&!panelMode){openPanel('guide');track('Ownership Explanation Opened',{entry_point:'guide'})}});
- eng.addCallback('luno_maybe_later',()=>{if(page==='stock'&&!user.ack&&!user.guideDismissed){user.guideDismissed=true;save();$('#ownership-guide').hidden=true;track('Ownership Guide Dismissed');identifyUpdate()}});
  eng.addCallback('luno_skip_feedback',()=>{if(surveyOpen){user.surveyUsed=true;save();identifyUpdate()}});
  return eng;
 }
@@ -254,27 +315,20 @@ function engagementMessage(message,retry=false){
 }
 function ensureEngagement(){
  if(engagementTask)return engagementTask;
- const guide=page==='stock'&&!user.ack&&!user.guideDismissed;
+ const guide=page==='explore'&&!user.walk?.completed;
  const survey=page==='explore'&&user.exited&&!user.surveyUsed;
- if(guide)engagementMessage('Loading ownership guide…');
  engagementTask=(async()=>{
    const eng=await startEngagement();
    if(!current())return;
    if(survey){surveyOpen=true;eng.gs.show('survey-what-did-you-need')}
-   if(guide){
-     eng.gs.show('guide-understand-tokenised');
-     const deadline=Date.now()+20000;
-     // The click-marker effect sets both inline styles and its click listener
-     // synchronously on the target. Re-read the live element each time.
-     while(current()){
-       const trigger=$('#ownership-guide');
-       if(!trigger||user.ack||user.guideDismissed)break;
-       if(trigger.style.cursor==='pointer'&&trigger.style.userSelect==='none'){
-         trigger.disabled=false;break;
-       }
-       if(Date.now()>deadline)throw Error('Ownership marker did not attach');
-       await delay(80);
-     }
+   const entry=$('#begin-guide');
+   if(entry){
+     entry.hidden=!!(user.walk?.active||user.walk?.completed);
+     entry.disabled=false;
+     entry.onclick=()=>{
+       if(!current()||user.walk?.active||user.walk?.completed)return;
+       user.walk={active:true};save();entry.hidden=true;eng.gs.show(guideKey);
+     };
    }
    $('#engagement-status')?.remove();
  })().catch(error=>{
@@ -301,12 +355,13 @@ function visit(){
 if(page==='launcher'){launcher();return}
 if(!user){location.replace(root);return}
 if(page==='preview'&&user.draft?.status!=='ready'){location.replace(root+routes[user.receipt?'confirmation':'stock']);return}
-if(page==='confirmation'&&!user.receipt){location.replace(root+routes.explore);return}
+if(page==='confirmation'&&!selectedOrder()){location.replace(root+routes.explore);return}
+window.addEventListener('storage',event=>{if(event.key==='luno:active'&&!current())location.replace(root)});
 if(!user.deviceId){user.deviceId=crypto.randomUUID();save()}
 if(page==='explore'||page==='stock')attempt=null;
-if(page==='confirmation')attempt={snapshot:user.receipt.snapshot};
+if(page==='confirmation'){const order=selectedOrder();attempt={snapshot:order.snapshot};if(!location.search)history.replaceState(null,'',orderUrl('confirmation',order))}
 const external=document.referrer&&new URL(document.referrer).origin!==location.origin;
-if(external||location.search||(!document.referrer&&performance.getEntriesByType('navigation')[0]?.type==='navigate')){user.touch=attribution();save()}
+if(external||new URLSearchParams(location.search).has('utm_source')||(!document.referrer&&performance.getEntriesByType('navigation')[0]?.type==='navigate')){user.touch=attribution();save()}
 render();ready=bootstrap();ready.catch(showFailure);visit();
 window.addEventListener('pageshow',e=>{if(e.persisted)location.reload()});
 })();
