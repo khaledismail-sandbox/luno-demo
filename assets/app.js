@@ -26,14 +26,14 @@ function attribution(){
  else if(fixture){values.referring_domain=fixture[3];values.referrer='https://'+fixture[3]+'/'}
  return values;
 }
-const mark='<span class="wordmark"><img alt="" src="'+root+'assets/luno.webp">Luno</span>';
+const mark='<span class="wordmark"><img alt="Luno" src="'+root+'assets/luno.webp"></span>';
 const icons={back:'M15 4l-8 8 8 8',account:'M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M4 21c1-8 15-8 16 0',Home:'M3 10l9-7 9 7v11h-6v-7H9v7H3z',Crypto:'M12 3a9 9 0 1 0 .1 0 M12 7a5 5 0 1 0 .1 0',Stocks:'M4 4h16v16H4z M5 15l5-5 3 2 6-6',Earn:'M12 21V11 M12 15C3 15 3 6 3 6c8 0 9 7 9 7 M12 11c0-7 9-8 9-8s0 8-9 8',Portfolio:'M3 7h18v14H3z M4 7V4h14v3 M15 12h6v4h-6z',ETFs:'M13 3a8 8 0 1 0 5 14 M16 11a5 5 0 1 0 .1 0'};
 function icon(k){return '<svg aria-hidden="true" class="ico" viewBox="0 0 24 24"><path d="'+icons[k]+'"/></svg>'}
 const asset='<span class="assetmark" aria-hidden="true">M</span>';
 const line='0,74 14,70 22,75 32,55 45,62 54,44 65,51 74,43 84,51 99,33 108,39 123,22 135,34 145,23 156,25 170,8 180,12';
 function chart(large=false){return '<svg class="'+(large?'chart':'spark')+'" viewBox="0 0 180 85" preserveAspectRatio="none" aria-hidden="true">'+(large?'<path d="M0 24h180 M0 51h180 M0 78h180" stroke="#e2e2e2" stroke-dasharray="2 4" fill="none"/>':'')+'<polyline points="'+line+'" fill="none" stroke="currentColor" stroke-width="'+(large?'2':'4')+'" stroke-linejoin="round"/></svg>'}
 function launcher(){
- const directory=read('directory',{});view.innerHTML='<section class="scroll launcher">'+mark+'<h1>Choose your account</h1><p class="muted">Use a fictional name and rehearsal number.</p><form><label>Fictional name<input class="amp-mask" id="name" required pattern="[A-Za-z ]*[A-Za-z][A-Za-z ]*" maxlength="30" autocomplete="off"></label><label>Demo number<input id="num" type="number" min="1" max="99999" step="1" required></label><p class="notice">Account ID<br><output id="identity"></output></p><button class="cta">Open Explore</button></form></section>';
+ const directory=read('directory',{});view.innerHTML='<section class="scroll launcher">'+mark+'<h1>Sign in</h1><form><label>Profile name<input class="amp-mask" id="name" required pattern="[A-Za-z ]*[A-Za-z][A-Za-z ]*" maxlength="30" autocomplete="off"></label><label>Profile number<input id="num" type="number" min="1" max="99999" step="1" required></label><p class="profile-reference">Account ID<br><output id="identity"></output></p><button class="cta">Sign in</button></form></section>';
  $('#name').value=user?.name||'Naledi';$('#num').value=user?.number||1;
  function identity(){const key=clean($('#name').value)+'_'+Number($('#num').value);return [key,directory[key]||'luno_'+key+'_'+new Date().toISOString().slice(0,10).replaceAll('-','')]}
  function update(){$('#identity').textContent=identity()[1]}
@@ -46,7 +46,7 @@ function launcher(){
  u.touch=touch;write(next,u);write('active',next);go('explore')};
 }
 const back=p=>'<a class="icon" aria-label="Back" href="'+root+routes[p]+'">'+icon('back')+'</a>';
-function header(prev){return '<header>'+(prev?back(prev):mark)+'<strong>'+(prev?titles[page]:'')+'</strong><button class="icon" id="account" aria-label="Choose account">'+icon('account')+'</button></header>'}
+function header(prev){return '<header>'+(prev?back(prev):mark)+'<strong>'+(prev?titles[page]:'')+'</strong><button class="icon" id="account" aria-label="Switch profile">'+icon('account')+'</button></header>'}
 const footer=(label,action)=>'<div class="actions"><button class="cta" id="'+action+'">'+label+'</button></div>';
 const list=(rows)=>'<dl class="receipt">'+rows.map(([a,b])=>'<div><dt>'+a+'</dt><dd>'+b+'</dd></div>').join('')+'</dl>';
 function render(){
@@ -60,9 +60,9 @@ function render(){
 
  $('#request').onclick=request;
  }else if(page==='preview'){
- view.innerHTML=header('stock')+'<section class="scroll"><p class="eyebrow">One-time purchase</p><h1>Review your order</h1><p>Cape Meridian · CMX</p>'+list([['Quantity','1 unit'],['Unit price','$100.00'],['Simulated fee','$1.00'],['Total · USD','$101.00']])+'<p class="notice">This is a simulated order. No money will move.</p><label class="mini">Private rehearsal note (optional)<input class="amp-mask" maxlength="36" autocomplete="off" placeholder="Fictional text only"></label></section>'+footer('Confirm simulated order','confirm');$('#confirm').onclick=confirm;
+ view.innerHTML=header('stock')+'<section class="scroll"><p class="eyebrow">One-time purchase</p><h1>Review your order</h1><p>Cape Meridian · CMX</p>'+list([['Quantity','1 unit'],['Unit price','$100.00'],['Platform fee','$1.00'],['Total · USD','$101.00']])+'<p class="notice">Confirming this order won’t move money or buy shares.</p><label class="mini">Private note (optional)<input class="amp-mask" maxlength="36" autocomplete="off" placeholder="Add a note"></label></section>'+footer('Confirm order','confirm');$('#confirm').onclick=confirm;
  }else{
- view.innerHTML=header('explore')+'<section class="scroll"><span class="seal">✓</span><h1>Order confirmed</h1><p>Your simulated purchase is complete.</p>'+list([['Cape Meridian','1 unit'],['Order value','$100.00'],['Simulated fee','$1.00'],['Total · USD','$101.00'],['Order ID',user.receipt.order_id]])+'<p class="notice">No shares were purchased or funds transferred.</p></section>'+footer('Back to Explore','home');$('#home').onclick=()=>go('explore');
+ view.innerHTML=header('explore')+'<section class="scroll"><span class="seal">✓</span><h1>Order confirmed</h1><p>Your order details are below.</p>'+list([['Cape Meridian','1 unit'],['Order value','$100.00'],['Platform fee','$1.00'],['Total · USD','$101.00'],['Order ID',user.receipt.order_id]])+'<p class="notice">No shares were purchased or funds transferred.</p></section>'+footer('Back to Explore','home');$('#home').onclick=()=>go('explore');
  }
  $('#account').onclick=switchAccount;
 }
