@@ -21,3 +21,8 @@
 a.cta { text-decoration: none; }
 .purchase + .purchase { margin-top: 10px; }
 a.textbtn { display: inline-flex; align-items: center; }
+
+.launcher fieldset.persona{margin:1.25rem 0 0;padding:0;border:0;color:#505860;font-size:.82rem}
+.launcher .persona legend{margin-bottom:.35rem}
+.launcher .persona label{display:inline-flex;align-items:center;gap:.35rem;margin:0 .8rem 0 0;min-height:36px;font-size:.82rem}
+.launcher .persona input{width:1rem;height:1rem;margin:0;accent-color:#314c65}

@@ -33,15 +33,27 @@ const asset='<span class="assetmark" aria-hidden="true">M</span>';
 const line='0,74 14,70 22,75 32,55 45,62 54,44 65,51 74,43 84,51 99,33 108,39 123,22 135,34 145,23 156,25 170,8 180,12';
 function chart(large=false){return '<svg class="'+(large?'chart':'spark')+'" viewBox="0 0 180 85" preserveAspectRatio="none" aria-hidden="true">'+(large?'<path d="M0 24h180 M0 51h180 M0 78h180" stroke="#e2e2e2" stroke-dasharray="2 4" fill="none"/>':'')+'<polyline points="'+line+'" fill="none" stroke="currentColor" stroke-width="'+(large?'2':'4')+'" stroke-linejoin="round"/></svg>'}
 function launcher(){
- const directory=read('directory',{});view.innerHTML='<section class="scroll launcher">'+mark+'<h1>Sign in</h1><form><label>Profile name<input class="amp-mask" id="name" required pattern="[A-Za-z ]*[A-Za-z][A-Za-z ]*" maxlength="30" autocomplete="off"></label><label>Profile number<input id="num" type="number" min="1" max="99999" step="1" required></label><p class="profile-reference">Account ID<br><output id="identity"></output></p><button class="cta">Sign in</button></form></section>';
+ const directory=read('directory',{});view.innerHTML='<section class="scroll launcher">'+mark+'<h1>Sign in</h1><form><label>Profile name<input class="amp-mask" id="name" required pattern="[A-Za-z ]*[A-Za-z][A-Za-z ]*" maxlength="30" autocomplete="off"></label><label>Profile number<input id="num" type="number" min="1" max="99999" step="1" required></label><p class="profile-reference">Account ID<br><output id="identity"></output></p><button class="cta">Sign in</button><fieldset class="persona"><legend>Demo persona</legend><label><input type="radio" name="persona" value="new" checked> New explorer</label><label><input type="radio" name="persona" value="returning"> Returning explorer</label></fieldset></form></section>';
  $('#name').value=user?.name||'Naledi';$('#num').value=user?.number||1;
  function identity(){const key=clean($('#name').value)+'_'+Number($('#num').value);return [key,directory[key]||'luno_'+key+'_'+new Date().toISOString().slice(0,10).replaceAll('-','')]}
- function update(){$('#identity').textContent=identity()[1]}
+ function update(){
+   const next=identity()[1],saved=read(next);
+   if($('#identity').textContent!==next){
+     const persona=saved?.ack?'returning':'new';
+     $('input[value="'+persona+'"]').checked=true;
+   }
+   $('.persona').disabled=!!saved;
+   $('#identity').textContent=next;
+ }
  update();$('form').oninput=update;
  $('form').onsubmit=e=>{e.preventDefault();const [key,next]=identity();directory[key]=next;write('directory',directory);
  if(user&&next!==id&&user.queue.length){showFailure('Previous account has pending events');return}
  const touch=attribution();const previous=read(next);
  const u=previous||{name:$('#name').value.trim(),number:Number($('#num').value),ack:false,guideDismissed:false,surveyUsed:false,exited:false,first:touch,orders:[],queue:[],age:180};
+ if(!previous&&$('input[value="returning"]').checked){
+   u.acknowledgement={event_type:'Ownership Explanation Acknowledged',data_origin:'synthetic_history',user_id:next,time:Date.now()-86400000};
+   u.ack=true;
+ }
  if(user&&next!==id){user.draft=null;save()}
  u.touch=touch;write(next,u);write('active',next);go('explore')};
 }
@@ -49,6 +61,10 @@ const back=p=>'<a class="icon" aria-label="Back" href="'+root+routes[p]+'">'+ico
 function header(prev){return '<header>'+(prev?back(prev):mark)+'<strong>'+(prev?titles[page]:'')+'</strong><button class="icon" id="account" aria-label="Switch profile">'+icon('account')+'</button></header>'}
 const footer=(label,action)=>'<div class="actions"><button class="cta" id="'+action+'">'+label+'</button></div>';
 const list=(rows)=>'<dl class="receipt">'+rows.map(([a,b])=>'<div><dt>'+a+'</dt><dd>'+b+'</dd></div>').join('')+'</dl>';
+function eligible(){return user.exited&&!user.ack&&!user.guideDismissed&&!user.walk?.active&&!user.walk?.completed}
+const returnTicket=sessionStorage.getItem('luno:return');
+sessionStorage.removeItem('luno:return');
+const returningFromExplore=page==='stock'&&returnTicket===id&&performance.getEntriesByType('navigation')[0]?.type==='navigate'&&document.referrer.split(/[?#]/)[0]===new URL(root+routes.explore,location.href).href;
 const guideKey='guide-understand-tokenised';
 const practiceQuote={quantity:1,unit_price_usd:100,platform_fee_usd:1};
 const money=value=>'$'+value.toFixed(2);
@@ -74,7 +90,7 @@ function accountScreen(){
  const units=qty+' '+(qty===1?'unit':'units');
  const parent={portfolio:'explore',holding:'portfolio',activity:'holding',details:'activity'}[page];
  let content='';
- if(page==='portfolio')content=qty?link('Cape Meridian · '+units,'holding','holding-card','card'):'<p>You have no holdings yet.</p>';
+ if(page==='portfolio')content=qty?link('Cape Meridian · '+units,'holding','holding-card','card guide-portfolio'):'<p>You have no holdings yet.</p>';
  if(page==='holding')content=(qty?'<p>'+units+'</p>':'<p>You have no Cape Meridian units.</p>')+link('Activity','activity','holding-activity','textbtn guide-record');
  if(page==='activity')content=history.length?history.reverse().map(order=>'<a class="card purchase '+(order.order_id===user.walk?.order?'guide-record':'')+'" href="'+orderUrl('details',order)+'">Cape Meridian purchase · '+order.order_id+'</a>').join(''):'<p>No purchases yet.</p>';
  if(page==='details'){
@@ -88,31 +104,30 @@ function render(){
  if(page==='explore'){
  const tabs='<div class="tabs"><span class="active">'+icon('Stocks')+'Stocks</span><button disabled>'+icon('ETFs')+'ETFs</button></div>';
  const nav='<nav aria-label="Main navigation">'+['Home','Crypto','Stocks','Earn','Portfolio'].map(k=>k==='Stocks'?'<span class="active" aria-current="page">'+icon(k)+k+'</span>':k==='Portfolio'?link(icon(k)+k,'portfolio','portfolio-tab','nav-link'):'<button disabled>'+icon(k)+k+'</button>').join('')+'</nav>';
- view.innerHTML=header()+tabs+'<section class="scroll listing"><h1 class="sr-only">Stocks</h1><a class="card" id="company-card" href="'+root+routes.stock+'"><div class="subhead">'+asset+'<span aria-hidden="true">›</span></div><div class="row"><span><strong>Cape Meridian</strong><br><small>CMX</small></span>'+chart()+'<span class="money"><strong>$100.00</strong><br><small class="positive">+1.20%</small></span></div></a><button class="textbtn" id="begin-guide" disabled>Walk me through my first order</button><br><button class="textbtn" id="market-highlights">Market highlights</button></section>'+nav;
+ view.innerHTML=header()+tabs+'<section class="scroll listing"><h1 class="sr-only">Stocks</h1><a class="card" id="company-card" href="'+root+routes.stock+'"><div class="subhead">'+asset+'<span aria-hidden="true">›</span></div><div class="row"><span><strong>Cape Meridian</strong><br><small>CMX</small></span>'+chart()+'<span class="money"><strong>$100.00</strong><br><small class="positive">+1.20%</small></span></div></a><button class="textbtn" id="market-highlights">Market highlights</button></section>'+nav;
+ $('#company-card').addEventListener('click',e=>{
+   if(e.button===0&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey&&current()&&eligible())sessionStorage.setItem('luno:return',id);
+ });
  }else if(page==='stock'){
- view.innerHTML=header('explore')+'<section class="scroll">'+asset+'<p class="eyebrow">CMX · USD</p><h1>Cape Meridian</h1><p class="price">$100.00</p><small class="positive">+$1.19 (1.20%) today</small>'+chart(true)+'<div class="section"><h2>Instrument details</h2><div class="subhead"><span>Tokenised stock</span><button class="textbtn" id="ownership-guide" disabled>What would I own?</button></div><p class="mini muted">Illustrative price · US dollars</p></div></section>'+footer('Preview order','request');
- const explanation=$('#ownership-guide');
- explanation.hidden=!user.walk?.active;
- explanation.disabled=false;
- explanation.onclick=()=>{if(!panelMode&&current()){openPanel('guide');track('Ownership Explanation Opened',{entry_point:'guide'})}};
+ view.innerHTML=header('explore')+'<section class="scroll">'+asset+'<p class="eyebrow">CMX · USD</p><h1 id="ownership-offer">Cape Meridian</h1><p class="price">$100.00</p><small class="positive">+$1.19 (1.20%) today</small>'+chart(true)+'<div class="section"><h2>Instrument details</h2><div class="subhead"><span>Tokenised stock</span></div><p class="mini muted">Illustrative price · US dollars</p></div></section>'+footer('Preview order','request');
  $('#request').onclick=request;
  }else if(page==='preview'){
  view.innerHTML=header('stock')+'<section class="scroll"><p class="eyebrow">One-time purchase</p><h1>Review your order</h1><p>Cape Meridian · CMX</p>'+list(amounts(user.draft.quote||practiceQuote))+'<p class="notice">Confirming this order won’t move money or buy shares.</p><label class="mini">Private note (optional)<input class="amp-mask" maxlength="36" autocomplete="off" placeholder="Add a note"></label></section>'+footer('Confirm order','confirm');$('#confirm').onclick=confirm;
  }else if(page==='confirmation'){
  const order=selectedOrder();
- view.innerHTML=header('explore')+'<section class="scroll"><span class="seal">✓</span><h1>Order confirmed</h1><p>Cape Meridian · CMX</p>'+list([...amounts(order),['Order ID',order.order_id]])+'<p class="notice">No shares were purchased or funds transferred.</p></section><div class="actions">'+link('View my portfolio','portfolio','view-portfolio','cta')+'<button id="home" class="secondary">Back to Explore</button></div>';$('#home').onclick=()=>go('explore');
+ view.innerHTML=header('explore')+'<section class="scroll"><span class="seal">✓</span><h1>Order confirmed</h1><p>Cape Meridian · CMX</p>'+list([...amounts(order),['Order ID',order.order_id]])+'<p class="notice">No shares were purchased or funds transferred.</p></section><div class="actions">'+link('View my portfolio','portfolio','view-portfolio',order.order_id===user.walk?.order?'cta guide-portfolio':'cta')+'<button id="home" class="secondary">Back to Explore</button></div>';$('#home').onclick=()=>go('explore');
  }else{
  view.innerHTML=accountScreen();
  }
  $('#account').onclick=switchAccount;
 }
 function openPanel(mode){
- if(panelMode)return;panelMode=mode;const layer=document.createElement('div');layer.className='overlay';
+ if(panelMode)return;panelMode=mode;const layer=document.createElement('div');layer.className='overlay';layer.dataset.panelMode=mode;
  layer.innerHTML='<section class="sheet" role="dialog" aria-modal="true" aria-labelledby="panel-title"><div class="handle"></div><h2 id="panel-title" tabindex="-1">What would I own?</h2><p>You own a digital token. Real shares are held to back it. The token follows the share price.</p><button class="cta" id="ack">'+(mode==='guide'?'I understand':'I understand · Continue')+'</button><button class="secondary" id="leave">'+(mode==='guide'?'Back to overview':'Back to Explore')+'</button></section>';
  view.inert=true;$('.phone').append(layer);$('#panel-title').focus();
- const close=()=>{layer.remove();view.inert=false;panelMode=null;(mode==='guide'&&!user.ack?$('#ownership-guide'):$('#request')).focus()};
+ const close=()=>{layer.remove();view.inert=false;panelMode=null;$('#request').focus()};
  layer.onkeydown=e=>{if(e.key==='Tab'){const at=document.activeElement;if(e.shiftKey&&at!== $('#leave')){e.preventDefault();$('#leave').focus()}else if(!e.shiftKey&&at===$('#leave')){e.preventDefault();$('#ack').focus()}}if(e.key==='Escape'&&mode==='guide')close()};
- $('#ack').onclick=()=>{if(busy)return;if(user.ack){close();return}user.ack=true;
+ $('#ack').onclick=()=>{if(busy)return;if(user.ack){close();return}user.ack=true;user.acknowledgement={event_type:'Ownership Explanation Acknowledged',data_origin:'browser_demo',user_id:id,time:Date.now()};
  if(mode==='preview_gate')user.draft.status='ready';save();identifyUpdate();
  const op=track('Ownership Explanation Acknowledged',{entry_point:mode});close();if(mode==='preview_gate')trackThenGo(op,'preview')};
  $('#leave').onclick=()=>{if(mode==='guide'){close();return}if(busy)return;user.exited=true;user.draft=null;save();const op=track('Order Preview Abandoned',{exit_action:'back_to_explore'});trackThenGo(op,'explore')};
@@ -205,8 +220,6 @@ function handleNative(event){
      const completed=type.endsWith('Completed');
      user.walk={...user.walk,active:false,completed};save();
      if(!completed){user.guideDismissed=true;track('Ownership Guide Dismissed');identifyUpdate()}
-     if($('#begin-guide'))$('#begin-guide').hidden=completed;
-     if($('#ownership-guide'))$('#ownership-guide').hidden=true;
      if($('#finish-guide'))$('#finish-guide').hidden=true;
    }
  }
@@ -301,13 +314,18 @@ async function connectEngagement(config,bridge){
    for(const event of pendingEngagementEvents.splice(0))await plugin.execute(event);
  }
  diagnostics.plugins.engagement='setup complete';
+ eng.addCallback('luno_read_ownership',()=>{
+   if(current()&&page==='stock'&&user.walk?.active&&!user.ack&&!panelMode){
+     openPanel('guide');track('Ownership Explanation Opened',{entry_point:'guide'});
+   }
+ });
  eng.addCallback('luno_skip_feedback',()=>{if(surveyOpen){user.surveyUsed=true;save();identifyUpdate()}});
  return eng;
 }
 function engagementMessage(message,retry=false){
  let note=$('#engagement-status');
  if(!note){note=document.createElement('div');note.id='engagement-status';note.setAttribute('role','status');
-   const anchor=$('#ownership-guide');
+   const anchor=$('#ownership-offer');
    if(anchor)anchor.parentElement.after(note);else view.prepend(note)}
  note.replaceChildren(document.createTextNode(message));
  if(retry){const button=document.createElement('button');button.className='textbtn';button.textContent='Retry';
@@ -315,20 +333,14 @@ function engagementMessage(message,retry=false){
 }
 function ensureEngagement(){
  if(engagementTask)return engagementTask;
- const guide=page==='explore'&&!user.walk?.completed;
+ const guide=returningFromExplore&&eligible();
  const survey=page==='explore'&&user.exited&&!user.surveyUsed;
  engagementTask=(async()=>{
    const eng=await startEngagement();
    if(!current())return;
    if(survey){surveyOpen=true;eng.gs.show('survey-what-did-you-need')}
-   const entry=$('#begin-guide');
-   if(entry){
-     entry.hidden=!!(user.walk?.active||user.walk?.completed);
-     entry.disabled=false;
-     entry.onclick=()=>{
-       if(!current()||user.walk?.active||user.walk?.completed)return;
-       user.walk={active:true};save();entry.hidden=true;eng.gs.show(guideKey);
-     };
+   if(guide&&eligible()){
+     user.walk={active:true};save();eng.gs.show(guideKey);
    }
    $('#engagement-status')?.remove();
  })().catch(error=>{
